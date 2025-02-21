@@ -1,32 +1,27 @@
 import numpy as np
 from numpy import arange, pi, sin, cos, arccos
-def humpfrey_point_generator():
-    manual_theta_phi = [[[21,21,21,21],[-9,-3,3,9]]] #skip top and bottom most
+from math import ceil
+def hfa_grid(radius=24, spacing=6):
+    """Generate a grid of points for the HFA 24-2 protocol"""
+    theta_values = np.arange(-(ceil(radius / spacing) + 0.5) * spacing, (ceil(radius / spacing) + 0.5) * spacing,
+                             spacing)
+    phi_values = np.arange(-(ceil(radius / spacing) + 0.5) * spacing, (ceil(radius / spacing) + 0.5) * spacing, spacing)
+    points = []
 
-    #manual_theta_phi = []
-    manual_theta_phi.append([[15, 15, 15, 15, 15, 15], [-15, -9, -3, 3, 9, 15]])
-    #manual_theta_phi.append([[15, 15, 15], [3, 9, 15]])#removed negatives
-    #manual_theta_phi.append([[15, 15, 15, 15, 15, 15], [-15, -9, -3, 3, 9, 15]])
-    manual_theta_phi.append([[9, 9, 9, 9, 9, 9, 9, 9], [-21, -15, -9, -3, 3, 9, 15, 21]])
-    #manual_theta_phi.append([[9, 9, 9, 9, 9, 9, 9], [-15, -9, -3, 3, 9, 15, 21]]) #remove -21
-    manual_theta_phi.append([[3,3,3,3,3,3,3,3,3],[-27,-21,-15,-9,-3,3,9,15,21]])
-    #manual_theta_phi.append([[3, 3, 3, 3, 3, 3, 3], [-15, -9, -3, 3, 9, 15, 21]]) #remove 2 leftmost
-    manual_theta_phi = [[[3,3],[-3,3]]]
-    merged_manual_theta_phi = [[],[]]
-    for i in manual_theta_phi:
-        merged_manual_theta_phi[0] += i[0]
-        merged_manual_theta_phi[1] += i[1]
-    half_theta_phi = np.asarray(merged_manual_theta_phi)
-    theta_phi = np.hstack((half_theta_phi,np.asarray([half_theta_phi[0]*-1,half_theta_phi[1]])))
-    theta_phi = np.asarray([[3, 3, -3, -3],[-3,3,3, -3]])
-    #theta_phi = np.hstack((theta_phi,np.asarray([[0],[-33]])))
-    #print(theta_phi)
-    return theta_phi
+    for theta in theta_values:
+        for phi in phi_values:
+            if theta == 0 and phi == 0:
+                continue
+            distance = np.sqrt(theta ** 2 + phi ** 2)
+            if distance <= radius:
+                points.append([phi, theta])
 
-def humpfrey_thetaphi_to_xy(thetaphi, WIDTH, HEIGHT, VIEWER_DISTANCE, PIXELS_PER_CM):
-    theta_phi = thetaphi / 180 * pi
-    theta = theta_phi[0]+pi/2
-    phi = theta_phi[1]
+    return np.array(points)
+
+def humpfrey_phitheta_to_xy(phitheta, WIDTH, HEIGHT, VIEWER_DISTANCE, PIXELS_PER_CM):
+    phitheta = phitheta / 180 * pi
+    phi = phitheta[:,0]
+    theta = phitheta[:,1]+pi/2
     x, y, z = sin(theta) * cos(phi), sin(theta) * sin(phi), cos(theta)
 
     # project to 2D screen that is VIEWER_DISTANCE away.
@@ -55,4 +50,43 @@ def humpfrey_thetaphi_to_xy(thetaphi, WIDTH, HEIGHT, VIEWER_DISTANCE, PIXELS_PER
     humpfrey_positions_plus_dot[1] += HEIGHT // 2
     dot_size = np.abs(humpfrey_positions_plus_dot - humpfrey_positions)
     # print(humpfrey_positions_plus_dot)
-    return np.vstack((humpfrey_positions, dot_size))
+    return humpfrey_positions.T, dot_size.T
+
+def hfa_24_2_grid():
+    points = hfa_grid(radius=24, spacing=6)
+    # points to add
+    add_points = [[-27, 3], [-27, 3]]  # Example points to add
+    standard_24_2_points = postprocess_add_remove(points, manual_add=add_points)
+    return standard_24_2_points
+
+def postprocess_add_remove(points, manual_add=None, manual_remove=None):
+    """Postprocess the grid: add and remove specific points"""
+    # Convert manual_add and manual_remove to numpy arrays for easier comparison
+    if manual_remove is None:
+        manual_remove = []
+    if manual_add is None:
+        manual_add = []
+    manual_add = np.array(manual_add)
+    manual_remove = np.array(manual_remove)
+
+    # Remove points specified in manual_remove
+    points = [point for point in points if not any(np.array_equal(point, rm) for rm in manual_remove)]
+
+    # Add points specified in manual_add, ensuring no duplicates
+    for point in manual_add:
+        if not any(np.array_equal(point, p) for p in points):
+            points.append(point)
+
+    return np.array(points)
+
+def remove_points_farther_than_distance(points, ref_points=None, distance_include=999):
+    """Remove points that are farther than a given distance from any of the reference points"""
+    if ref_points is None:
+        ref_points = [0, 0]
+    filtered_points = []
+    for point in points:
+        # Check the distance to each reference point
+        if any(np.linalg.norm(np.array(point) - np.array(ref_point)) <= distance_include for ref_point in ref_points):
+            filtered_points.append(point)
+
+    return np.array(filtered_points)

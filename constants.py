@@ -28,6 +28,10 @@ CROSS_SIZE = 6
 CROSS_WIDTH = 2
 
 # Game settings
-GAME_DURATION = 30  # 5 minutes in seconds
+GAME_DURATION = 10  # 5 minutes in seconds
 response_window = 1  # 1 second to respond after the dot disappears
 time_pause_limit = [1, 3]
+stimulus_duration = 0.2 #https://www.ncbi.nlm.nih.gov/books/NBK585112/ #
+
+scotoma_points = [[3, 3], [9, 3]]  # 24-2 test's scotoma points
+scotoma_margin = 6.2  # Maximum distance for points to remain

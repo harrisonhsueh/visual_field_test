@@ -6,15 +6,12 @@ from datetime import datetime
 import csv
 import time
 from numpy import trapz
-# Import the constants from constants.py
-from constants import SCREEN_SIZE, VIEWER_DISTANCE, PIXELS_PER_CM, WIDTH, HEIGHT, gamma, dBstep_size, background_color, background_level, dBlevels, dot_levels, dot_colors
 
-
-def draw_cross(screen, WIDTH, HEIGHT, ORANGE, CROSS_SIZE, CROSS_WIDTH):
-    pygame.draw.line(screen, ORANGE, (WIDTH // 2 - CROSS_SIZE, HEIGHT // 2),
-                     (WIDTH // 2 + CROSS_SIZE, HEIGHT // 2), CROSS_WIDTH)
-    pygame.draw.line(screen, ORANGE, (WIDTH // 2, HEIGHT // 2 - CROSS_SIZE),
-                     (WIDTH // 2, HEIGHT // 2 + CROSS_SIZE), CROSS_WIDTH)
+def draw_cross(screen, width, height, cross_color, cross_size, line_width):
+    pygame.draw.line(screen, cross_color, (width // 2 - cross_size, height // 2),
+                     (width // 2 + cross_size, height // 2), line_width)
+    pygame.draw.line(screen, cross_color, (width // 2, height // 2 - cross_size),
+                     (width // 2, height // 2 + cross_size), line_width)
 
 def print_results(responses_positions, humpfrey_positions, responses_lists, dot_colors, start_time):
     results = []

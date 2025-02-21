@@ -7,8 +7,8 @@ from utils import draw_cross, print_results, print_setup, bayesian_all
 # Import the constants from constants.py
 from constants import SCREEN_SIZE, VIEWER_DISTANCE, PIXELS_PER_CM, WIDTH, HEIGHT, gamma, dBstep_size, background_color, \
     background_level, dBlevelsCount, dBlevels, dot_levels, dot_colors, BACKGROUND, WHITE, ORANGE, CROSS_SIZE, \
-    CROSS_WIDTH, GAME_DURATION, response_window, time_pause_limit
-from humpfrey import humpfrey_point_generator, humpfrey_thetaphi_to_xy
+    CROSS_WIDTH, GAME_DURATION, response_window, time_pause_limit, stimulus_duration, scotoma_points, scotoma_margin
+from humpfrey import hfa_grid, humpfrey_phitheta_to_xy, hfa_24_2_grid, remove_points_farther_than_distance
 from sklearn.neighbors import KDTree
 from scipy.spatial import ConvexHull
 import test_subject_response
@@ -17,17 +17,22 @@ import test_subject_response
 # Initialize game state variables here
 def initialize_game_state():
     # Initializing positions, responses, and other game variables
-    humpfrey_thetaphi = humpfrey_point_generator()
-    humpfrey_positions = humpfrey_thetaphi_to_xy(humpfrey_thetaphi, WIDTH, HEIGHT, VIEWER_DISTANCE, PIXELS_PER_CM).T
+    humpfrey_phitheta = hfa_grid(radius=24, spacing=2)
+    humpfrey_phitheta = remove_points_farther_than_distance(humpfrey_phitheta, ref_points=scotoma_points, distance_include=scotoma_margin)
+    #humpfrey_positions = humpfrey_phitheta(humpfrey_phitheta, WIDTH, HEIGHT, VIEWER_DISTANCE, PIXELS_PER_CM).T
+    print(humpfrey_phitheta)
+    print(len(humpfrey_phitheta))
+    humpfrey_positions, dot_radii = humpfrey_phitheta_to_xy(humpfrey_phitheta, WIDTH, HEIGHT, VIEWER_DISTANCE, PIXELS_PER_CM)
     responses_positions = np.empty((humpfrey_positions.shape[0], len(dBlevels), 10))  # 3D array for storing responses
+    print(len(humpfrey_positions))
     responses_positions[:] = np.nan  # Initialize with NaN values to mark no response
     responses_lists = [[] for _ in range(humpfrey_positions.shape[0])]
     responses_times = []  # List to store response times
     thresholds = np.empty(humpfrey_positions.shape[0])  # Threshold for each position
-    thetaphi_kdtree = KDTree(humpfrey_thetaphi)
+    phitheta_kdtree = KDTree(humpfrey_phitheta)
     print(f'dBlevels: {dBlevels}')
     time.sleep(1)
-    return humpfrey_positions, responses_positions, responses_lists, responses_times, thresholds, thetaphi_kdtree
+    return humpfrey_positions, dot_radii, responses_positions, responses_lists, responses_times, thresholds, phitheta_kdtree
 
 
 def find_next_color_index(index, responses_positions, dBlevelsCount):
@@ -63,12 +68,12 @@ def all_thresholds_found(responses_lists, humpfrey_positions):
 
 # Build KD-Tree for the positions
 def build_kd_tree(humpfrey_positions):
-    positions = humpfrey_positions[:, :2]  # Only x and y coordinates
+    positions = humpfrey_positions # Only x and y coordinates
     return KDTree(positions)
 
 
-def display_heatmap(screen, humpfrey_positions, responses_positions, responses_lists, dot_colors, dBlevelsCount, dBlevels):
-    thresholds_test = test_subject_response.sensitivity(humpfrey_point_generator())
+def display_heatmap_old(screen, humpfrey_positions, responses_positions, responses_lists, dot_colors, dBlevelsCount, dBlevels):
+    thresholds_test = test_subject_response.sensitivity(hfa_24_2_grid())
     # Build KD-Tree once at the beginning
     kd_tree = build_kd_tree(humpfrey_positions)
 
@@ -79,11 +84,10 @@ def display_heatmap(screen, humpfrey_positions, responses_positions, responses_l
     # Define the size of the squares (adjustable)
     square_size = step_size  # This will match the step size, so each square covers the area we're sampling
     # Use the Convex Hull to create a smooth boundary around the points
-    # Extract only the x and y coordinates from humpfrey_positions
-    points_2d = humpfrey_positions[:, :2]  # This selects the first two columns (x and y)
+    points_2d = humpfrey_positions
     try:
         hull = ConvexHull(points_2d)  # We only need the (x, y) positions
-        hull_points = humpfrey_positions[hull.vertices][:, :2]  # Get the points that form the convex hull
+        hull_points = humpfrey_positions[hull.vertices]  # Get the points that form the convex hull
         # Draw the convex hull as a polygon on the heatmap (smooth boundary)
         pygame.draw.polygon(heatmap, (255, 255, 255), hull_points, width=2)  # Red outline
     except Exception as e:
@@ -111,8 +115,8 @@ def display_heatmap(screen, humpfrey_positions, responses_positions, responses_l
                     np.ones(dBlevelsCount), dBlevelsCount, dBlevels, responses_lists[index], k_guess=10))]
                 #print(thresholds_dB)
                 thresh_levels = 255 * (10 ** (-thresholds_dB / 10))
-                gamma = 0.7
-                color = 255 - 255 * (thresh_levels / 255) ** (1 / gamma)
+                gamma_results = 0.7
+                color = 255 - 255 * (thresh_levels / 255) ** (1 / gamma_results)
                 # color = dot_colors[
                 #            dBlevelsCount - 1 - last_seen_index] - fudge_darker if last_seen_index >= -1 else 10
                 # Drawing a small square at the (x, y) location, colored based on the nearest point
@@ -122,6 +126,59 @@ def display_heatmap(screen, humpfrey_positions, responses_positions, responses_l
     draw_cross(screen, WIDTH, HEIGHT, ORANGE, CROSS_SIZE, CROSS_WIDTH)
     pygame.display.flip()
 
+
+def display_heatmap(screen, humpfrey_positions, responses_positions, responses_lists, dot_colors, dBlevelsCount,
+                    dBlevels):
+    thresholds_test = test_subject_response.sensitivity(hfa_24_2_grid())
+    # Build KD-Tree once at the beginning
+    kd_tree = build_kd_tree(humpfrey_positions)
+
+    heatmap = pygame.Surface((WIDTH, HEIGHT))
+    heatmap.fill(WHITE)
+
+    # Use the Convex Hull to create a smooth boundary around the points
+    points_2d = humpfrey_positions
+    try:
+        hull = ConvexHull(points_2d)  # We only need the (x, y) positions
+        hull_points = humpfrey_positions[hull.vertices]  # Get the points that form the convex hull
+        # Draw the convex hull as a polygon on the heatmap (smooth boundary)
+        pygame.draw.polygon(heatmap, (255, 255, 255), hull_points, width=2)  # White outline
+    except Exception as e:
+        print("Error calculating Convex Hull:", e)
+    # Create a Path object from the convex hull vertices (for point-in-polygon checks)
+    from matplotlib.path import Path
+    hull_path = Path(hull_points)
+
+    font = pygame.font.SysFont('Arial', 12)  # Choose a font and size for threshold text
+
+    for index in range(humpfrey_positions.shape[0]):  # Iterate through all test points
+        x, y = humpfrey_positions[index]  # Get the position of the test point
+        print(f'index{index}, {humpfrey_positions[index]}')
+
+        # Check if the point is inside the convex hull using matplotlib's Path.contains_point
+        if 1:#hull_path.contains_point((x, y)):
+            # Calculate the color of the point based on the nearest data point's dB level
+            thresholds_dB = dBlevels[np.argmax(bayesian_all(
+                np.ones(dBlevelsCount), dBlevelsCount, dBlevels, responses_lists[index], k_guess=10))]
+
+            thresh_levels = 255 * (10 ** (-thresholds_dB / 10))
+            gamma_results = 0.7
+            color = 255 - 255 * (thresh_levels / 255) ** (1 / gamma_results)
+
+            # Draw a small square at the (x, y) location, colored based on the nearest point
+            #pygame.draw.rect(heatmap, (color, color, color),
+            #                 pygame.Rect(x - 3, y - 3, 6, 6))  # Slightly adjust for square size
+
+            # Render the threshold value as text
+            threshold_text = f'{thresholds_dB:.0f}'  # Show the threshold value as text
+            text_surface = font.render(threshold_text, True, (0, 0, 0))  # Black color for text
+            text_rect = text_surface.get_rect(center=(x, y))  # Center the text on the test point
+            heatmap.blit(text_surface, text_rect)
+
+    pygame.draw.polygon(heatmap, (0, 0, 0), hull_points, width=2)  # Black outline around convex hull
+    screen.blit(heatmap, (0, 0))
+    draw_cross(screen, WIDTH, HEIGHT, ORANGE, CROSS_SIZE, CROSS_WIDTH)
+    pygame.display.flip()
 
 def main(screen):
     running = True
@@ -136,11 +193,12 @@ def main(screen):
     # Initialize the game state
     (
         humpfrey_positions,
+        dot_radii,
         responses_positions,
         responses_lists,
         responses_times,
         thresholds,
-        thetaphi_kdtree
+        phitheta_kdtree
     ) = initialize_game_state()
 
     while running:
@@ -188,7 +246,7 @@ def main(screen):
                     dot_color_index = choose_next_intensity_index(posterior)
                     if dot_color_index is not None:
                         dot_pos = (humpfrey_positions[index, 0], humpfrey_positions[index, 1])
-                        dot_radius = (humpfrey_positions[index, 2] + humpfrey_positions[index, 3]) / 2
+                        dot_radius = (dot_radii[index,0] + dot_radii[index,1]) / 2
                         dot_color = (dot_colors[dot_color_index],) * 3
 
                         dot_positions.append(index)
@@ -206,7 +264,7 @@ def main(screen):
                 if dot_visible:
                     pygame.draw.circle(screen, dot_color, dot_pos, dot_radius)
                     pygame.display.flip()
-                    time.sleep(0.2) #https://www.ncbi.nlm.nih.gov/books/NBK585112/ #
+                    time.sleep(stimulus_duration)
                     screen.fill(BACKGROUND)
                     draw_cross(screen, WIDTH, HEIGHT, ORANGE, CROSS_SIZE, CROSS_WIDTH)
                     pygame.display.flip()

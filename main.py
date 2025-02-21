@@ -2,7 +2,7 @@
 
 import pygame
 from game import main as game_main
-from constants import WIDTH, HEIGHT, SCREEN_SIZE, VIEWER_DISTANCE, PIXELS_PER_CM
+from constants import WIDTH, HEIGHT
 
 def initialize_pygame():
     # Initialize the Pygame library and set up the screen dimensions
