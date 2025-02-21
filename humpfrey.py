@@ -1,6 +1,7 @@
 import numpy as np
 from numpy import arange, pi, sin, cos, arccos
 from math import ceil
+from constants import stimuli_target_size_degrees
 def hfa_grid(radius=24, spacing=6):
     """Generate a grid of points for the HFA 24-2 protocol"""
     theta_values = np.arange(-(ceil(radius / spacing) + 0.5) * spacing, (ceil(radius / spacing) + 0.5) * spacing,
@@ -38,7 +39,7 @@ def humpfrey_phitheta_to_xy(phitheta, WIDTH, HEIGHT, VIEWER_DISTANCE, PIXELS_PER
     humpfrey_positions[0] += WIDTH // 2
     humpfrey_positions[1] += HEIGHT // 2
     # print(humpfrey_positions)
-    DOT_SIZE_radius_radian = 0.43 / 180 * pi # https://www.ncbi.nlm.nih.gov/books/NBK585112/ # Target 	Size ( in square mm)	Degrees:III	4	0.43 degrees
+    DOT_SIZE_radius_radian = stimuli_target_size_degrees / 180 * pi
     phi += DOT_SIZE_radius_radian
     theta += DOT_SIZE_radius_radian
     screen_x_plus_dot, screen_y_plus_dot = VIEWER_DISTANCE * ( sin(phi) / cos(phi)), VIEWER_DISTANCE * (

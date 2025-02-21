@@ -1,0 +1,18 @@
+From ECE637 Lab for my Samsung NU7100 40" TV
+
+Backlight = 35/50 (personal
+Sharpness = 10 (personal default)
+Initially set Contrast (Picture) to 25/50
+Brightness (Black) = -2 in range [-5 5] for black to look blackest
+Increase Contrast to 35/50 for comfortable brightness
+
+Gray Level = 154
+Gamma = 1.37
+
+I changed contrast to 50/50 for this test and general use.
+It looks like in this setting, the 50/50 checkers look a bit darker...
+so maybe gray level would be lower than 154, and gamma is less than 1.37, but we will keep as is for now.
+
+
+Can skip testing for false negatives, such as in SITA FASTER
+https://www.sciencedirect.com/science/article/pii/S0002939418305920

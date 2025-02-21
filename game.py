@@ -20,18 +20,15 @@ def initialize_game_state():
     humpfrey_phitheta = hfa_grid(radius=24, spacing=2)
     humpfrey_phitheta = remove_points_farther_than_distance(humpfrey_phitheta, ref_points=scotoma_points, distance_include=scotoma_margin)
     #humpfrey_positions = humpfrey_phitheta(humpfrey_phitheta, WIDTH, HEIGHT, VIEWER_DISTANCE, PIXELS_PER_CM).T
-    print(humpfrey_phitheta)
-    print(len(humpfrey_phitheta))
     humpfrey_positions, dot_radii = humpfrey_phitheta_to_xy(humpfrey_phitheta, WIDTH, HEIGHT, VIEWER_DISTANCE, PIXELS_PER_CM)
     responses_positions = np.empty((humpfrey_positions.shape[0], len(dBlevels), 10))  # 3D array for storing responses
-    print(len(humpfrey_positions))
     responses_positions[:] = np.nan  # Initialize with NaN values to mark no response
     responses_lists = [[] for _ in range(humpfrey_positions.shape[0])]
     responses_times = []  # List to store response times
     thresholds = np.empty(humpfrey_positions.shape[0])  # Threshold for each position
     phitheta_kdtree = KDTree(humpfrey_phitheta)
     print(f'dBlevels: {dBlevels}')
-    time.sleep(1)
+    time.sleep(3)
     return humpfrey_positions, dot_radii, responses_positions, responses_lists, responses_times, thresholds, phitheta_kdtree
 
 
@@ -72,7 +69,7 @@ def build_kd_tree(humpfrey_positions):
     return KDTree(positions)
 
 
-def display_heatmap_old(screen, humpfrey_positions, responses_positions, responses_lists, dot_colors, dBlevelsCount, dBlevels):
+def display_heatmap_greyscale(screen, humpfrey_positions, responses_positions, responses_lists, dot_colors, dBlevelsCount, dBlevels):
     thresholds_test = test_subject_response.sensitivity(hfa_24_2_grid())
     # Build KD-Tree once at the beginning
     kd_tree = build_kd_tree(humpfrey_positions)
@@ -153,7 +150,6 @@ def display_heatmap(screen, humpfrey_positions, responses_positions, responses_l
 
     for index in range(humpfrey_positions.shape[0]):  # Iterate through all test points
         x, y = humpfrey_positions[index]  # Get the position of the test point
-        print(f'index{index}, {humpfrey_positions[index]}')
 
         # Check if the point is inside the convex hull using matplotlib's Path.contains_point
         if 1:#hull_path.contains_point((x, y)):
@@ -219,7 +215,6 @@ def main(screen):
                                 last_non_nan_index = np.where(non_nan_indices)[0][-1]
                                 responses_positions[last_non_nan_index] = True
                             responses_lists[index][-1] = [dot_color_index, 1]
-                            print(responses_lists)
                             responses_times.append([index, dot_color_index, time.time(), 1])
                         responses_times.append([np.inf, np.inf, time.time(), 1])
                     else:
