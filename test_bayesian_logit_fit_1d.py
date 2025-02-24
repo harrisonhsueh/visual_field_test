@@ -222,7 +222,7 @@ def compute_confidence_window(posterior, intensities, confidence_level=0.80):
 # Run the Bayesian estimation process with a uniform prior
 def run_bayesian_estimation(k=2, b=32, k_guess=2, noise_level=0.01, max_prob_guess=0.95, min_prob_guess=0.05, max_prob=0.95, min_prob=0.05, plot_results = True, num_trials = 5):
     # Load the lookup table from the file
-    with open('optimal_choices_fast.pkl', 'rb') as f:
+    with open('optimal_choices_fast_old.pkl', 'rb') as f:
         lookup_table = pickle.load(f)
     # Initialize the sequence of results
     result_sequence = ''
@@ -402,7 +402,7 @@ def run_bayesian_estimation(k=2, b=32, k_guess=2, noise_level=0.01, max_prob_gue
         all_trials_likelihood /= trapz(all_trials_likelihood,
                                        dx=(max(intensities) - min(intensities)) / intensity_levels)
     # plt.plot(intensities, all_trials_likelihood, 'o', label = "posterior combined trials", color = 'k')
-    if plot_results or np.abs(trial_max_posterior[4][0]-b)>6:
+    if plot_results and np.abs(trial_max_posterior[4][0]-b)>6:
         print(trial_max_posterior[4])
         plt.title(f'b = {b}, trial 4 result max posterior: {trial_max_posterior[4]}')
         plt.plot(np.linspace(1, num_trials, num_trials), np.array(trial_confidence_window) / 10)
@@ -419,9 +419,9 @@ def run_bayesian_estimation(k=2, b=32, k_guess=2, noise_level=0.01, max_prob_gue
 
 # Run the Bayesian estimation process
 np.random.seed(0)
-run_bayesian_estimation(b=20,plot_results = True)
+#run_bayesian_estimation(b=20,plot_results = True)
 
-if 0:
+if 1:
     bs = np.arange(0, 41,10)  # bs from 0 to 40
     num_tests = 100
     num_trials = 5
@@ -433,4 +433,4 @@ if 0:
             #run_bayesian_estimation(k=2, b=32, k_guess=2, noise_level=0.01, max_prob_guess=0.95, min_prob_guess=0.05, max_prob=0.95, min_prob=0.05)
 
     # Save final_results to a file
-    np.save(f'final_results_bs_{bs}_num_tests_{num_tests}_trials_{num_trials}_precompute4.npy', final_results)
+    np.save(f'final_results_old_bs_{bs}_num_tests_{num_tests}_trials_{num_trials}_precompute4.npy', final_results)

@@ -5,7 +5,9 @@ import matplotlib.pyplot as plt
 bs = np.arange(0, 41,10)  # bs from 0 to 40
 num_tests = 100
 final_results = np.load(f'final_results_bs_{bs}_num_tests_{num_tests}_trials_{5}_precompute4.npy')
+final_results_old = np.load(f'final_results_old_bs_{bs}_num_tests_{num_tests}_trials_{5}_precompute4.npy')
 final_results[:,:,:,1] = final_results[:,:,:,1]/2
+final_results_old[:,:,:,1] = final_results_old[:,:,:,1]/2
 # Subtract bs from all columns of final_results
 #error = final_results - bs[:, np.newaxis, np.newaxis, np.newaxis]
 # Index for the p dimension
@@ -17,13 +19,18 @@ mode_mean_median = [0, 1, 2]
 mode_mean_median_index = 2
 # Compute global bin edges that cover all i indices
 all_data = np.concatenate([final_results[i, :, test_index,mode_mean_median_index] for i in b_indices])
+all_data_old = np.concatenate([final_results_old[i, :, test_index,mode_mean_median_index] for i in b_indices])
 global_counts, global_bin_edges = np.histogram(all_data, bins=20)
+global_counts_old, global_bin_edges_old = np.histogram(all_data_old, bins=20)
 
 # Compute histograms for each i index using the global bin edges
 hist_data = []
+hist_data_old = []
 for b_index in b_indices:
     counts, _ = np.histogram(final_results[b_index, :, test_index,mode_mean_median_index], bins=global_bin_edges)
     hist_data.append(counts)
+    counts, _ = np.histogram(final_results_old[b_index, :, test_index,mode_mean_median_index], bins=global_bin_edges_old)
+    hist_data_old.append(counts)
 
 # Plot histograms with offsets and narrower bars
 plt.figure(figsize=(10, 6))
@@ -32,6 +39,7 @@ for idx, b_index in enumerate(b_indices):
     # Offset each histogram by shifting the bin edges
     offset = idx * bar_width
     plt.bar(global_bin_edges[:-1] + offset, hist_data[idx], width=bar_width, alpha=0.7, label=f'i={b_index}')
+    plt.bar(global_bin_edges_old[:-1] + offset, hist_data_old[idx], width=bar_width, alpha=0.7, label=f'old i={b_index}')
 
 # Add labels and legend
 plt.xlabel('Error Value')
@@ -43,22 +51,29 @@ b_index = 2
 for b_index in b_indices:
     # Compute global bin edges that cover all mode_mean_median indices
     all_data = np.concatenate([final_results[b_index, :, test_index,i] for i in mode_mean_median])
+    all_data_old = np.concatenate([final_results_old[b_index, :, test_index, i] for i in mode_mean_median])
 
     global_counts, global_bin_edges = np.histogram(all_data, bins=20)
+    global_counts_old, global_bin_edges_old = np.histogram(all_data_old, bins=20)
 
     # Compute histograms for each i index using the global bin edges
     hist_data = []
+    hist_data_old = []
     for mode_mean_median_index in mode_mean_median:
         counts, _ = np.histogram(final_results[b_index, :, test_index,mode_mean_median_index], bins=global_bin_edges)
         hist_data.append(counts)
+        counts, _ = np.histogram(final_results_old[b_index, :, test_index, mode_mean_median_index], bins=global_bin_edges_old)
+        hist_data_old.append(counts)
 
     # Plot histograms with offsets and narrower bars
     plt.figure(figsize=(10, 6))
     bar_width = (global_bin_edges[1] - global_bin_edges[0]) / (len(b_indices) + 1)  # Adjust bar width
-    for idx, mode_mean_median_index in enumerate(mode_mean_median):
+    for idx, mode_mean_median_index in enumerate([0]):#enumerate(mode_mean_median):
         # Offset each histogram by shifting the bin edges
         offset = idx * bar_width
         plt.bar(global_bin_edges[:-1] + offset, hist_data[idx], width=bar_width, alpha=0.7, label=f'mode_mean_median={mode_mean_median}')
+        plt.bar(global_bin_edges_old[:-1] + offset, hist_data_old[idx], width=bar_width, alpha=0.7,
+                label=f'old mode_mean_median={mode_mean_median}')
 
     # Add labels and legend
     plt.xlabel('Error Value')

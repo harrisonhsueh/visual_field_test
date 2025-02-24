@@ -228,6 +228,11 @@ def expected_entropy_after_n_trials(prior_tuple, intensities_tuple, k_guess, max
         likelihood_success = logistic_function(candidate_intensity, k_guess, intensities) * (
                     max_prob_guess - min_prob_guess) + min_prob_guess
         likelihood_failure = 1 - likelihood_success
+
+        # Compute the expected likelihood by weighting with the prior
+        expected_likelihood_success = np.sum(likelihood_success * prior)
+        expected_likelihood_failure = np.sum(likelihood_failure * prior)
+
         #time_start = time.perf_counter()
         # Compute the posterior for success and failure
         posterior_success = bayesian_update_1d(prior, intensities, candidate_intensity, 1, k_guess, max_prob_guess,
@@ -256,10 +261,9 @@ def expected_entropy_after_n_trials(prior_tuple, intensities_tuple, k_guess, max
         #time_elapsed = time_end - time_start
         #print(f'time for 2 n_trials n={n_trials - 1} = {time_elapsed}')
         expected_entropy_2d[
-            i] = likelihood_success * expected_entropy_success + likelihood_failure * expected_entropy_failure
+            i] = expected_likelihood_success * expected_entropy_success + expected_likelihood_failure * expected_entropy_failure
         # Compute the expected entropy for this candidate intensity (scalar value)
-        expected_entropy = np.sum(
-            likelihood_success * expected_entropy_success + likelihood_failure * expected_entropy_failure)
+        expected_entropy = np.sum(expected_entropy_2d[i])
         expected_entropy_1d[i] = expected_entropy
         # Update the minimum expected entropy
         if expected_entropy < min_expected_entropy:
@@ -470,5 +474,5 @@ lookup_table = precompute_optimal_choices(prior, b_values, k_guess, max_prob_gue
 precompute_end_time = time.time()
 print(f'precompute_total_time = {precompute_end_time - precompute_start_time}')
 # Save the lookup table to a file
-with open('optimal_choices_fast.pkl', 'wb') as f:
+with open('optimal_choices_fast_old.pkl', 'wb') as f:
     pickle.dump(lookup_table, f)
