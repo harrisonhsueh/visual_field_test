@@ -6,7 +6,7 @@ import pygame
 from utils import draw_cross, print_results, print_setup, bayesian_all
 # Import the constants from constants.py
 from constants import SCREEN_SIZE, VIEWER_DISTANCE, PIXELS_PER_CM, WIDTH, HEIGHT, gamma, dBstep_size, background_color, \
-    background_level, dBlevelsCount, dBlevels, dot_levels, dot_colors, BACKGROUND, WHITE, ORANGE, CROSS_SIZE, \
+    background_level, stimuli_dBlevels, stimuli_cdm2, stimuli_colors, dBlevels_count, prior, BACKGROUND, WHITE, ORANGE, CROSS_SIZE, \
     CROSS_WIDTH, GAME_DURATION, response_window, time_pause_limit, stimulus_duration, scotoma_points, scotoma_margin
 from humpfrey import hfa_grid, humpfrey_phitheta_to_xy, hfa_24_2_grid, remove_points_farther_than_distance
 from sklearn.neighbors import KDTree
@@ -21,13 +21,14 @@ def initialize_game_state():
     humpfrey_phitheta = remove_points_farther_than_distance(humpfrey_phitheta, ref_points=scotoma_points, distance_include=scotoma_margin)
     #humpfrey_positions = humpfrey_phitheta(humpfrey_phitheta, WIDTH, HEIGHT, VIEWER_DISTANCE, PIXELS_PER_CM).T
     humpfrey_positions, dot_radii = humpfrey_phitheta_to_xy(humpfrey_phitheta, WIDTH, HEIGHT, VIEWER_DISTANCE, PIXELS_PER_CM)
-    responses_positions = np.empty((humpfrey_positions.shape[0], len(dBlevels), 10))  # 3D array for storing responses
+    responses_positions = np.empty((humpfrey_positions.shape[0], len(dBlevels_count), 10))  # 3D array for storing responses, only supports up to 10 tests per position
+    priors = np.repeat( prior[None,:], humpfrey_positions.shape[0], axis=0 )
     responses_positions[:] = np.nan  # Initialize with NaN values to mark no response
     responses_lists = [[] for _ in range(humpfrey_positions.shape[0])]
     responses_times = []  # List to store response times
     thresholds = np.empty(humpfrey_positions.shape[0])  # Threshold for each position
     phitheta_kdtree = KDTree(humpfrey_phitheta)
-    print(f'dBlevels: {dBlevels}')
+    print(f'dBlevels: {stimuli_dBlevels}')
     time.sleep(3)
     return humpfrey_positions, dot_radii, responses_positions, responses_lists, responses_times, thresholds, phitheta_kdtree
 
@@ -185,7 +186,7 @@ def main(screen):
     last_dot_time = 0
     dot_visible = False
     print_setup(start_time, SCREEN_SIZE, VIEWER_DISTANCE, PIXELS_PER_CM, WIDTH, HEIGHT, gamma, dBstep_size,
-                background_color, background_level, dBlevels, dot_levels, dot_colors)
+                background_color, background_level, stimuli_dBlevels, stimuli_cdm2, stimuli_colors)
     # Initialize the game state
     (
         humpfrey_positions,
@@ -229,20 +230,20 @@ def main(screen):
             if time.time() - start_time >= GAME_DURATION or (all_thresholds_found(responses_lists,
                                                                                  humpfrey_positions) and time.time() - last_dot_time > response_window):
                 game_over = True
-                display_heatmap(screen, humpfrey_positions, responses_positions, responses_lists, dot_colors, dBlevelsCount, dBlevels)
-                print_results(responses_positions, humpfrey_positions, responses_lists, dot_colors, start_time)
+                display_heatmap(screen, humpfrey_positions, responses_positions, responses_lists, stimuli_colors, dBlevels_count, dBlevels_count)
+                print_results(responses_positions, humpfrey_positions, responses_lists, stimuli_colors, start_time)
                 running = False
             else:
                 if len(dot_positions) == 0 or (time.time() - last_dot_time > time_pause and not dot_visible):
                     time_pause = random.randint(time_pause_limit[0], time_pause_limit[1])
                     index = np.random.choice(humpfrey_positions.shape[0], 1, replace=False)[0]
                     #dot_color_index = find_next_color_index(index, responses_positions, dBlevelsCount)
-                    posterior = bayesian_all(np.ones(dBlevelsCount), dBlevelsCount, dBlevels, responses_lists[index], k_guess = 10)
+                    posterior = bayesian_all(np.ones(dBlevels_count), dBlevels_count, stimuli_dBlevels, responses_lists[index], k_guess = 10)
                     dot_color_index = choose_next_intensity_index(posterior)
                     if dot_color_index is not None:
                         dot_pos = (humpfrey_positions[index, 0], humpfrey_positions[index, 1])
                         dot_radius = (dot_radii[index,0] + dot_radii[index,1]) / 2
-                        dot_color = (dot_colors[dot_color_index],) * 3
+                        dot_color = (stimuli_colors[dot_color_index],) * 3
 
                         dot_positions.append(index)
                         responses.append(False)
@@ -281,8 +282,8 @@ def main(screen):
                 if event.key == pygame.K_q or event.key == pygame.K_ESCAPE:
                     running = False
                     game_over = False
-        display_heatmap(screen, humpfrey_positions, responses_positions, responses_lists, dot_colors, dBlevelsCount,
-                        dBlevels)
+        display_heatmap(screen, humpfrey_positions, responses_positions, responses_lists, stimuli_colors, dBlevelsCount,
+                        stimuli_dBlevels)
 
     pygame.quit()
 

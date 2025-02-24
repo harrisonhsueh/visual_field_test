@@ -1,5 +1,6 @@
 # constants.py
 import numpy as np
+from bimodal_distribution import generate_bimodal_prior
 
 # Screen dimensions
 WIDTH, HEIGHT = 1280, 720
@@ -17,6 +18,7 @@ PIXELS_PER_CM = 400 / 27.6  # pixels/cm measured
 # Humpfrey visual field test has 0 dB (maximum brightness) stimuli of 10,000 apostilbs
 max_brightness = 204
 humpfrey_max_stimulus = 3183
+humpfrey_background = 10
 # Maximum contrast of 5397:1 according to rtings.com
 # Minimum brightness thus is about 0.05 cd/m^2. This is ok, since much lower than desired background luminance of 10 cd/m^2
 
@@ -29,11 +31,13 @@ background_color = int(255 * (background_level / 255) ** (1 / gamma)) #28 for my
 min_color = background_color
 max_level = 255
 max_color = 255
-max_stimulus_dB = -np.log10((204-10) / 3183) * 10 # 12.15 dB for my setup (more positive is less bright, less positive is more bright).
-min_stimulus_dB = -np.log10(1 / 3183) * 10 # 35 dB for my setup
-stimuli_colors = np.arange(background_color,max_color+1)
-stimuli_levels = 255 * (stimuli_colors / 255) ** (gamma)
-stimuli_dBlevels = - np.log(stimuli_levels/3183) * 10
+max_stimulus_dB = -np.log10((max_brightness-humpfrey_background) / humpfrey_max_stimulus) * 10 # 12.15 dB for my setup (more positive is less bright, less positive is more bright).
+min_stimulus_level = max_brightness * (1 / 255) ** (gamma)
+min_stimulus_dB = -np.log10(1 / humpfrey_max_stimulus) * 10 # 35 dB for my setup
+stimuli_colors = np.arange(background_color+1,max_color+1,1) #every 1 or 2 integers, ie, 28, 30, 32 ...252, 254
+stimuli_cdm2 = max_brightness * (stimuli_colors / 255) ** (gamma)
+stimuli_dBlevels = - np.log10((stimuli_cdm2-humpfrey_background)/3183) * 10
+dBlevels_count = len(stimuli_dBlevels)
 #dBlevelsAvailable = np.log10(max_level / min_level) * 10
 #dBlevelsCount = round(np.trunc(dBlevelsAvailable / dBstep_size))
 #dBlevels = np.linspace(0, 0 + (dBlevelsCount-1)*dBstep_size, dBlevelsCount)
@@ -43,6 +47,20 @@ BACKGROUND = (background_color, background_color, background_color)  # backgroun
 WHITE = (max_level, max_level, max_level)
 ORANGE = (255, 165, 0)
 stimuli_target_size_degrees = 0.43 # https://www.ncbi.nlm.nih.gov/books/NBK585112/ # Target 	Size ( in square mm)	Degrees:III	4	0.43 degrees
+
+b_values = np.linspace(max_stimulus_dB, min_stimulus_dB, 200)
+# Define the parameters for the bimodal distribution
+mean_b1 = 35  # Mean of the first Gaussian
+std_b1 = 10  # Standard deviation of the first Gaussian
+mean_b2 = 0  # Mean of the second Gaussian
+std_b2 = 10  # Standard deviation of the second Gaussian
+
+# Set the weight for each Gaussian
+weight_b1 = 2  # First Gaussian has twice the weight of the second
+weight_b2 = 1  # Second Gaussian has normal weight
+
+# Generate the bimodal prior distribution using the function
+prior = generate_bimodal_prior(b_values, mean_b1, std_b1, mean_b2, std_b2, weight_b1, weight_b2)
 
 # Cross mark dimensions
 CROSS_SIZE = 6

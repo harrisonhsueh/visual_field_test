@@ -13,15 +13,15 @@ def draw_cross(screen, width, height, cross_color, cross_size, line_width):
     pygame.draw.line(screen, cross_color, (width // 2, height // 2 - cross_size),
                      (width // 2, height // 2 + cross_size), line_width)
 
-def print_results(responses_positions, humpfrey_positions, responses_lists, dot_colors, start_time):
+def print_results(responses_positions, humpfrey_positions, responses_lists, posterior, dot_colors, start_time):
     results = []
     total_time_elapsed = time.time() - start_time
     print(responses_lists)
     for index, pos in enumerate(humpfrey_positions):
         responses_at_pos = responses_positions[index]
         true_indices = np.where(responses_at_pos == True)[0]
-        threshold_index = np.min(true_indices) if true_indices.size > 0 else np.nan
-        threshold_color = dot_colors[threshold_index] if not np.isnan(threshold_index) else np.nan
+        #threshold_index = np.min(true_indices) if true_indices.size > 0 else np.nan
+        #threshold_color = dot_colors[threshold_index] if not np.isnan(threshold_index) else np.nan
 
         results.append({
             "Position Index": index,
