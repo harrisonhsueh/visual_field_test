@@ -3,74 +3,171 @@ import time
 import random
 import numpy as np
 import pygame
-from utils import draw_cross, print_results, print_setup, bayesian_all
+from utils import draw_cross, print_results, print_setup, bayesian_all, confidence_interval_vectorized, \
+    choose_next_intensity_1d, choose_next_intensity_from_lookup
 # Import the constants from constants.py
 from constants import SCREEN_SIZE, VIEWER_DISTANCE, PIXELS_PER_CM, WIDTH, HEIGHT, gamma, dBstep_size, background_color, \
-    background_level, stimuli_dBlevels, stimuli_cdm2, stimuli_colors, dBlevels_count, prior, BACKGROUND, WHITE, ORANGE, CROSS_SIZE, \
-    CROSS_WIDTH, GAME_DURATION, response_window, time_pause_limit, stimulus_duration, scotoma_points, scotoma_margin
+    background_level, stimuli_dBlevels, stimuli_cdm2, stimuli_colors, dBlevels_count, b_values, prior, k_guess, \
+    max_prob_guess, min_prob_guess, lookup_file, BACKGROUND, WHITE, ORANGE, \
+    CROSS_SIZE, \
+    CROSS_WIDTH, GAME_DURATION, response_window, time_pause_limit, stimulus_duration, scotoma_points, scotoma_margin, \
+    total_point_radius, point_degree_spacing
 from humpfrey import hfa_grid, humpfrey_phitheta_to_xy, hfa_24_2_grid, remove_points_farther_than_distance
 from sklearn.neighbors import KDTree
 from scipy.spatial import ConvexHull
 import test_subject_response
+import pickle
 
 
 # Initialize game state variables here
 def initialize_game_state():
     # Initializing positions, responses, and other game variables
-    humpfrey_phitheta = hfa_grid(radius=24, spacing=2)
-    humpfrey_phitheta = remove_points_farther_than_distance(humpfrey_phitheta, ref_points=scotoma_points, distance_include=scotoma_margin)
-    #humpfrey_positions = humpfrey_phitheta(humpfrey_phitheta, WIDTH, HEIGHT, VIEWER_DISTANCE, PIXELS_PER_CM).T
-    humpfrey_positions, dot_radii = humpfrey_phitheta_to_xy(humpfrey_phitheta, WIDTH, HEIGHT, VIEWER_DISTANCE, PIXELS_PER_CM)
-    responses_positions = np.empty((humpfrey_positions.shape[0], len(dBlevels_count), 10))  # 3D array for storing responses, only supports up to 10 tests per position
-    priors = np.repeat( prior[None,:], humpfrey_positions.shape[0], axis=0 )
-    responses_positions[:] = np.nan  # Initialize with NaN values to mark no response
-    responses_lists = [[] for _ in range(humpfrey_positions.shape[0])]
-    responses_times = []  # List to store response times
+    humpfrey_phitheta = hfa_grid(radius=total_point_radius, spacing=point_degree_spacing)
+    print(f'shape of humpfrey_phitheta {np.shape(humpfrey_phitheta)}')
+    humpfrey_phitheta = remove_points_farther_than_distance(humpfrey_phitheta, ref_points=scotoma_points,
+                                                            distance_include=scotoma_margin)
+    print(f'shape of humpfrey_phitheta {np.shape(humpfrey_phitheta)}')
+    humpfrey_positions, dot_radii = humpfrey_phitheta_to_xy(humpfrey_phitheta, WIDTH, HEIGHT, VIEWER_DISTANCE,
+                                                            PIXELS_PER_CM)
+    print(f'shape of humpfrey_positions {np.shape(humpfrey_positions)}')
+    responses_positions = np.empty((humpfrey_positions.shape[0], len(stimuli_dBlevels),
+                                    20))  # 3D array for storing responses, only supports up to 10 tests per position
+    results = np.zeros((humpfrey_positions.shape[0] + 1, 30,
+                        4))  # [-1] is for false positives. Shape (m+1,n,p). m is number of positions. n is max number of tests per position, and size p is for time of stimuli, response time, stimuli dB, and 1 or 0 for the result
+    responses_positions[:] = np.nan  # Initialize with NaN values to mark no response ##replace with results
+    responses_lists = [[] for _ in range(humpfrey_positions.shape[0])]  # replace with results
+    responses_times = []  # List to store response times #replace with results
     thresholds = np.empty(humpfrey_positions.shape[0])  # Threshold for each position
     phitheta_kdtree = KDTree(humpfrey_phitheta)
+    # Load the lookup table from the file
+    with open(lookup_file, 'rb') as f:
+        lookup_table = pickle.load(f)
     print(f'dBlevels: {stimuli_dBlevels}')
     time.sleep(3)
-    return humpfrey_positions, dot_radii, responses_positions, responses_lists, responses_times, thresholds, phitheta_kdtree
+    return humpfrey_phitheta, humpfrey_positions, dot_radii, results, responses_positions, responses_lists, responses_times, thresholds, phitheta_kdtree, lookup_table
 
 
-def find_next_color_index(index, responses_positions, dBlevelsCount):
-    low, high = 0, dBlevelsCount - 1
-    responses_at_pos = responses_positions[index, :, 0]
+def choose_next_intensity(position_index, results, posteriors, b_values, lookup_table):
+    '''
+    :param position_index:
+    :param results:
+    :param posteriors:
+    :param b_values:
+    :param lookup_table:
+    :return: next_intensity to test
+    '''
+    # check the lookup table to see if this situation is inside it
+    # It is a dictionary with keys '', '0', '1', '00', '01', '11' etc. they stand for the results so far for a position index. The value it has is the test intensity we should choose.
+    # If not inside the dictionary, then find next intinsity using choose_next_intensity_1d
 
-    while low <= high:
-        mid = (low + high) // 2
-        if np.isnan(responses_at_pos[mid]):
-            return mid
-        elif responses_at_pos[mid]:
-            high = mid - 1
-        else:
-            low = mid + 1
-    return None
-# Function to select the next light intensity based on the current posterior
-def choose_next_intensity_index(posterior):
-    # Find all indices where the posterior is maximized
-    max_posterior_value = np.max(posterior)
-    max_indices = np.where(posterior == max_posterior_value)[0]
+    # Identify valid indices where results were recorded (not initialized as zero)
+    valid_indices = results[position_index, :, 0] != 0  # Shape: (n,)
 
-    # Choose the center intensity from those indices
-    center_index = (max_indices[0] + max_indices[-1]) // 2
-    return center_index
+    # Extract result sequence using valid indices
+    result_sequence = results[position_index, valid_indices, 3]
+    result_sequence = ''.join(map(str, result_sequence))  # Convert to string
+    if lookup_table and lookup_table.get(result_sequence):
+        next_intensity_refined = choose_next_intensity_from_lookup(lookup_table, result_sequence)
+    else:
+        _, next_intensity_refined = choose_next_intensity_1d(posteriors[position_index], b_values, max_prob_guess=0.95,
+                                                             min_prob_guess=0.05)
+    return next_intensity_refined
 
 
-def all_thresholds_found(responses_lists, humpfrey_positions):
-    a = [len(x) for x in responses_lists]
-    if min(a) > 5:
+def all_thresholds_found(posteriors, intensities, thresholds, confidence=0.95, confidence_width_tolerance=6):
+    widths, lowers, uppers = confidence_interval_vectorized(posteriors, intensities, confidence)
+    if np.all(widths < confidence_width_tolerance) and np.all((thresholds > lowers) & (thresholds < uppers)):
         return True
     return False
 
 
+def update_thresholds(prior, results, posteriors, thresholds):
+    ''' 
+    :param thresholds: array to store calculated thresholds (shape: (m,)).
+    :param prior:  array (shape: (m, q)).
+    :param results:  array (shape: (m, n, p)).
+    :return: posterior (shape: (m, q)).
+    '''
+    # print(f'prior {prior}')
+    new_posteriors = bayesian_all(prior, b_values, results[:-1], k_guess, max_prob_guess, min_prob_guess)
+    # print(f'posteriors {posteriors}')
+    # print(f'thresholds {thresholds}')
+    new_thresholds = b_values[np.argmax(posteriors, axis=1)]
+    return new_posteriors, new_thresholds
+
+
 # Build KD-Tree for the positions
 def build_kd_tree(humpfrey_positions):
-    positions = humpfrey_positions # Only x and y coordinates
+    positions = humpfrey_positions  # Only x and y coordinates
     return KDTree(positions)
 
 
-def display_heatmap_greyscale(screen, humpfrey_positions, responses_positions, responses_lists, dot_colors, dBlevelsCount, dBlevels):
+def update_results(pressed, key_press_time, last_dot_time, results, index, dot_color_index, stimuli_dBs):
+    print(f'updating results with pressed = {pressed}, key_press_time = {key_press_time}, last_dot_time = {last_dot_time}, index = {index}, dot_color_index = {dot_color_index}, dot_dB = {stimuli_dBs[dot_color_index]}')
+    print(f'before update: {results}')
+    print(results)
+    if not pressed:  # stimulus was just flashed
+        print('just logging stimuli shown')
+        non_zero_indices = results[index, :, 0] != 0  # Find non-zero entries
+        if np.any(non_zero_indices):
+            last_non_zero_index = np.where(non_zero_indices)[0][-1]
+            next_index = last_non_zero_index + 1
+        else:
+            next_index = 0  # First entry
+        if next_index >= results.shape[1]:  # Check for available space
+            print(f'no more space at position index {index}')
+        else:
+            results[index, next_index] = np.array(
+                [last_dot_time, 0, stimuli_dBs[dot_color_index], False])
+    elif pressed and key_press_time - last_dot_time <= response_window:  # key pressed within time
+        # responses[-1] = True
+        # set last non np.nan to true
+        print('logging stimuli responded positively')
+        non_zero_indices = results[index, :, 0] != 0
+        if np.any(non_zero_indices):
+            print('logging stimuli responded positively, has previous responses')
+            last_non_zero_index = np.where(non_zero_indices)[0][-1]
+            next_index = last_non_zero_index
+        else:
+            print('logging stimuli responded positively, has no previous responses')
+            next_index = 0
+        if results[index, next_index, 3] == 0:  # check if stimuli was shown/logged, and this is first key press. otherwise it is a double click and a false positive
+            print('logging stimuli responded positively, checked that previous response is 0')
+            results[index, next_index] = np.array(
+                [last_dot_time, key_press_time - last_dot_time, stimuli_dBs[dot_color_index], True])
+        else:
+            # false positive, double clicked
+            print('logging false positive')
+            non_zero_indices = results[results.shape[0] - 1, :, 0] != 0
+            if np.any(non_zero_indices):
+                last_non_zero_index = np.where(non_zero_indices)[0][-1]
+                next_index = last_non_zero_index + 1
+            else:
+                next_index = 0
+            if next_index >= results.shape[1]:
+                print(f'no more space for logging false positives')
+            else:
+                results[results.shape[0] - 1, next_index] = np.array(
+                    [last_dot_time, key_press_time - last_dot_time, stimuli_dBs[dot_color_index], True])
+    else:
+        # false positive, pressed outside of response window or pressed already
+        print('logging false positive')
+        non_zero_indices = results[results.shape[0] - 1, :, 0] != 0
+        if np.any(non_zero_indices):
+            last_non_zero_index = np.where(non_zero_indices)[0][-1]
+            next_index = last_non_zero_index + 1
+        else:
+            next_index = 0
+        if next_index >= results.shape[1]:
+            print(f'no more space for logging false positives')
+        else:
+            results[results.shape[0] - 1, next_index] = np.array(
+                [last_dot_time, key_press_time - last_dot_time, stimuli_dBs[dot_color_index], True])
+    return
+
+
+def display_heatmap_greyscale(screen, humpfrey_positions, responses_positions, responses_lists, dot_colors,
+                              dBlevelsCount, dBlevels):
     thresholds_test = test_subject_response.sensitivity(hfa_24_2_grid())
     # Build KD-Tree once at the beginning
     kd_tree = build_kd_tree(humpfrey_positions)
@@ -105,13 +202,13 @@ def display_heatmap_greyscale(screen, humpfrey_positions, responses_positions, r
                 # Calculate the color of the point based on the nearest data point's dB level
                 # You can also use the dot_levels or any other color logic ba
                 index = nearest_index[0][0]
-                #response = responses_positions[index, :, 0]
+                # response = responses_positions[index, :, 0]
 
-                #last_seen_index = np.max(np.nonzero(response == True), initial=-99)
-                #thresholds_dB = thresholds_test[index]
+                # last_seen_index = np.max(np.nonzero(response == True), initial=-99)
+                # thresholds_dB = thresholds_test[index]
                 thresholds_dB = dBlevels[np.argmax(bayesian_all(
                     np.ones(dBlevelsCount), dBlevelsCount, dBlevels, responses_lists[index], k_guess=10))]
-                #print(thresholds_dB)
+                # print(thresholds_dB)
                 thresh_levels = 255 * (10 ** (-thresholds_dB / 10))
                 gamma_results = 0.7
                 color = 255 - 255 * (thresh_levels / 255) ** (1 / gamma_results)
@@ -125,7 +222,9 @@ def display_heatmap_greyscale(screen, humpfrey_positions, responses_positions, r
     pygame.display.flip()
 
 
-def display_heatmap(screen, humpfrey_positions, responses_positions, responses_lists, dot_colors, dBlevelsCount,
+# def display_heatmap(screen, humpfrey_positions, responses_positions, responses_lists, dot_colors, dBlevelsCount,
+#                    dBlevels):
+def display_heatmap(screen, humpfrey_positions, results, thresholds, dot_colors, dBlevelsCount,
                     dBlevels):
     thresholds_test = test_subject_response.sensitivity(hfa_24_2_grid())
     # Build KD-Tree once at the beginning
@@ -153,17 +252,17 @@ def display_heatmap(screen, humpfrey_positions, responses_positions, responses_l
         x, y = humpfrey_positions[index]  # Get the position of the test point
 
         # Check if the point is inside the convex hull using matplotlib's Path.contains_point
-        if 1:#hull_path.contains_point((x, y)):
+        if 1:  # hull_path.contains_point((x, y)):
             # Calculate the color of the point based on the nearest data point's dB level
-            thresholds_dB = dBlevels[np.argmax(bayesian_all(
-                np.ones(dBlevelsCount), dBlevelsCount, dBlevels, responses_lists[index], k_guess=10))]
+            thresholds_dB = thresholds[
+                index]  # dBlevels[np.argmax(bayesian_all(np.ones(dBlevelsCount), dBlevelsCount, dBlevels, responses_lists[index], k_guess=10))]
 
             thresh_levels = 255 * (10 ** (-thresholds_dB / 10))
             gamma_results = 0.7
             color = 255 - 255 * (thresh_levels / 255) ** (1 / gamma_results)
-
+            color = 255 - dot_colors[index]
             # Draw a small square at the (x, y) location, colored based on the nearest point
-            #pygame.draw.rect(heatmap, (color, color, color),
+            # pygame.draw.rect(heatmap, (color, color, color),
             #                 pygame.Rect(x - 3, y - 3, 6, 6))  # Slightly adjust for square size
 
             # Render the threshold value as text
@@ -177,10 +276,13 @@ def display_heatmap(screen, humpfrey_positions, responses_positions, responses_l
     draw_cross(screen, WIDTH, HEIGHT, ORANGE, CROSS_SIZE, CROSS_WIDTH)
     pygame.display.flip()
 
+
 def main(screen):
+    screen.fill(BACKGROUND)
+    draw_cross(screen, WIDTH, HEIGHT, ORANGE, CROSS_SIZE, CROSS_WIDTH)
+    pygame.display.flip()
     running = True
     game_over = False
-    dot_positions = []
     responses = []
     start_time = time.time()
     last_dot_time = 0
@@ -189,15 +291,19 @@ def main(screen):
                 background_color, background_level, stimuli_dBlevels, stimuli_cdm2, stimuli_colors)
     # Initialize the game state
     (
+        humpfrey_phitheta,
         humpfrey_positions,
         dot_radii,
+        results,
         responses_positions,
         responses_lists,
         responses_times,
         thresholds,
-        phitheta_kdtree
+        phitheta_kdtree,
+        lookup_table
     ) = initialize_game_state()
-
+    posteriors = np.tile(prior, (humpfrey_positions.shape[0], 1))
+    time_pause = 0  # initialize variable
     while running:
         screen.fill(BACKGROUND)
         draw_cross(screen, WIDTH, HEIGHT, ORANGE, CROSS_SIZE, CROSS_WIDTH)
@@ -208,53 +314,45 @@ def main(screen):
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
                     if not game_over:
-                        if dot_visible or (time.time() - last_dot_time <= response_window):
-                            responses[-1] = True
-                            # set last non np.nan to true
-                            non_nan_indices = ~np.isnan(responses_positions)
-                            if np.any(non_nan_indices):
-                                last_non_nan_index = np.where(non_nan_indices)[0][-1]
-                                responses_positions[last_non_nan_index] = True
-                            responses_lists[index][-1] = [dot_color_index, 1]
-                            responses_times.append([index, dot_color_index, time.time(), 1])
-                        responses_times.append([np.inf, np.inf, time.time(), 1])
+                        update_results(1, time.time(), last_dot_time, results, index, dot_color_index, stimuli_dBlevels)
+                        posteriors, thresholds = update_thresholds(prior, results, posteriors, thresholds)
                     else:
-                        dot_positions = []
-                        responses = []
-                        start_time = time.time()
-                        game_over = False
+                        print("doing nothing if game over and user presses space key")
                 if event.key == pygame.K_q or event.key == pygame.K_ESCAPE:
                     running = False
 
         if not game_over:
-            if time.time() - start_time >= GAME_DURATION or (all_thresholds_found(responses_lists,
-                                                                                 humpfrey_positions) and time.time() - last_dot_time > response_window):
+            if time.time() - start_time >= GAME_DURATION or (
+                    all_thresholds_found(posteriors, b_values, thresholds, 0.95,
+                                         6) and time.time() - last_dot_time > response_window):
                 game_over = True
-                display_heatmap(screen, humpfrey_positions, responses_positions, responses_lists, stimuli_colors, dBlevels_count, dBlevels_count)
-                print_results(responses_positions, humpfrey_positions, responses_lists, stimuli_colors, start_time)
+                display_heatmap(screen, humpfrey_positions, results, thresholds, stimuli_colors,
+                                dBlevels_count, stimuli_dBlevels)
+                print_results(humpfrey_phitheta, humpfrey_positions, results, thresholds, posteriors, stimuli_colors,
+                              start_time)
                 running = False
             else:
-                if len(dot_positions) == 0 or (time.time() - last_dot_time > time_pause and not dot_visible):
-                    time_pause = random.randint(time_pause_limit[0], time_pause_limit[1])
+                if time.time() - last_dot_time > time_pause and not dot_visible:
+                    time_pause = random.uniform(time_pause_limit[0], time_pause_limit[1])
                     index = np.random.choice(humpfrey_positions.shape[0], 1, replace=False)[0]
-                    #dot_color_index = find_next_color_index(index, responses_positions, dBlevelsCount)
-                    posterior = bayesian_all(np.ones(dBlevels_count), dBlevels_count, stimuli_dBlevels, responses_lists[index], k_guess = 10)
-                    dot_color_index = choose_next_intensity_index(posterior)
+                    posteriors, thresholds = update_thresholds(prior, results, posteriors, thresholds)
+                    dot_dB = choose_next_intensity(index, results, posteriors, b_values, lookup_table)
+                    dot_color_index = np.argmin(np.abs(stimuli_dBlevels - dot_dB))
                     if dot_color_index is not None:
                         dot_pos = (humpfrey_positions[index, 0], humpfrey_positions[index, 1])
-                        dot_radius = (dot_radii[index,0] + dot_radii[index,1]) / 2
+                        dot_radius = (dot_radii[index, 0] + dot_radii[index, 1]) / 2
                         dot_color = (stimuli_colors[dot_color_index],) * 3
 
-                        dot_positions.append(index)
-                        responses.append(False)
-                        #set first np.nan to false
-                        nan_indices = np.isnan(responses_positions)
-                        if np.any(nan_indices):
-                            first_nan_index = np.where(nan_indices)[0][0]
-                            responses_positions[first_nan_index] = False
+                        # responses.append(False)
+                        # set first np.nan to false
+                        # nan_indices = np.isnan(responses_positions)
+                        # if np.any(nan_indices):
+                        #     first_nan_index = np.where(nan_indices)[0][0]
+                        #     responses_positions[first_nan_index] = False
                         last_dot_time = time.time()
-                        responses_times.append([index, dot_color_index, last_dot_time, 0])
-                        responses_lists[index].append([dot_color_index,0])
+                        update_results(0, 0, last_dot_time, results, index, dot_color_index, stimuli_dBlevels)
+                        # responses_times.append([index, dot_color_index, last_dot_time, 0])
+                        # responses_lists[index].append([dot_color_index, 0])
                         dot_visible = True
 
                 if dot_visible:
@@ -275,14 +373,13 @@ def main(screen):
                 game_over = False
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
-                    dot_positions = []
                     responses = []
                     start_time = time.time()
-                    game_over = False
+                    # game_over = False keep showing even if just space is clicked
                 if event.key == pygame.K_q or event.key == pygame.K_ESCAPE:
                     running = False
                     game_over = False
-        display_heatmap(screen, humpfrey_positions, responses_positions, responses_lists, stimuli_colors, dBlevelsCount,
+        display_heatmap(screen, humpfrey_positions, results, thresholds, stimuli_colors, len(stimuli_dBlevels),
                         stimuli_dBlevels)
 
     pygame.quit()

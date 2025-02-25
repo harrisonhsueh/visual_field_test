@@ -7,6 +7,7 @@ from constants import stimuli_dBlevels, stimuli_colors
 from bimodal_distribution import generate_bimodal_prior
 import pickle
 
+
 # Logistic function to model probability of success
 def logistic_function(I, k, b):
     return 1 - 1 / (1 + np.exp(-(k * (I - b))))
@@ -61,7 +62,8 @@ def bayesian_all(prior, intensity_levels, intensities, results, k_guess, max_pro
     """
     # Likelihood of getting 1, given various b guesses
     likelihoods = logistic_function(np.tile(results[:, 0, None], (1, intensity_levels)), k_guess,
-                                    np.tile(intensities, (results.shape[0], 1)))  * (max_prob_guess - min_prob_guess) + min_prob_guess
+                                    np.tile(intensities, (results.shape[0], 1))) * (
+                          max_prob_guess - min_prob_guess) + min_prob_guess
 
     # Likelihood is 1-likelihood for where results were actually 0, and mask if not tested
     likelihoods[results[:, 1] == 0] = 1 - likelihoods[results[:, 1] == 0]
@@ -116,7 +118,8 @@ def choose_next_intensity_1d(prior, intensities, k_guess=10, max_prob_guess=1.0,
     # Loop over all possible intensities to test
     for i, intensity in enumerate(intensities):
         # Compute the likelihood of success and failure for all possible b values
-        likelihood_success_all_b = logistic_function(intensity, k_guess, intensities) * (max_prob_guess - min_prob_guess) + min_prob_guess
+        likelihood_success_all_b = logistic_function(intensity, k_guess, intensities) * (
+                max_prob_guess - min_prob_guess) + min_prob_guess
         likelihood_failure_all_b = 1 - likelihood_success_all_b
 
         # Compute the expected likelihood by weighting with the prior
@@ -124,8 +127,10 @@ def choose_next_intensity_1d(prior, intensities, k_guess=10, max_prob_guess=1.0,
         expected_likelihood_failure = np.sum(likelihood_failure_all_b * prior)
 
         # Compute the posterior for both possible outcomes (success and failure)
-        posterior_success = bayesian_update_1d(prior, intensities, intensity, 1, k_guess, max_prob_guess, min_prob_guess)
-        posterior_failure = bayesian_update_1d(prior, intensities, intensity, 0, k_guess, max_prob_guess, min_prob_guess)
+        posterior_success = bayesian_update_1d(prior, intensities, intensity, 1, k_guess, max_prob_guess,
+                                               min_prob_guess)
+        posterior_failure = bayesian_update_1d(prior, intensities, intensity, 0, k_guess, max_prob_guess,
+                                               min_prob_guess)
 
         # Compute the entropy of the posterior distributions
         # entropy_success = entropy(posterior_success)
@@ -142,12 +147,14 @@ def choose_next_intensity_1d(prior, intensities, k_guess=10, max_prob_guess=1.0,
     max_info_gain_index = np.argmax(expected_information_gain)
     min_expected_entropy = np.min(expected_entropy)
     return min_expected_entropy, intensities[max_info_gain_index]
+
+
 def expected_entropy_after_n_trials(prior, intensities, k_guess, max_prob_guess, min_prob_guess, n_trials=5):
     """
     Recursively compute the expected entropy of the posterior after n_trials,
     given the current prior. At each step, choose the best candidate intensity.
     """
-    #if n_trials>1:
+    # if n_trials>1:
     #    print(f'expected_entropy_after_n_trials {n_trials}')
     # Base case: if n_trials == 0, return the entropy of the current prior
     if n_trials == 0:
@@ -158,23 +165,28 @@ def expected_entropy_after_n_trials(prior, intensities, k_guess, max_prob_guess,
         return choose_next_intensity_1d(prior, intensities, k_guess, max_prob_guess, min_prob_guess)
     # Initialize the minimum expected entropy to a large value
     min_expected_entropy = float('inf')
-    best_intensity =  None
+    best_intensity = None
 
     # Loop over all candidate intensities to find the one that minimizes the expected entropy
     for candidate_intensity in intensities:
         # Compute the likelihood of success and failure for the candidate intensity
-        likelihood_success = logistic_function(candidate_intensity, k_guess, intensities) * (max_prob_guess - min_prob_guess) + min_prob_guess
+        likelihood_success = logistic_function(candidate_intensity, k_guess, intensities) * (
+                max_prob_guess - min_prob_guess) + min_prob_guess
         likelihood_failure = 1 - likelihood_success
 
         # Compute the posterior for success and failure
-        posterior_success = bayesian_update_1d(prior, intensities, candidate_intensity, 1, k_guess, max_prob_guess, min_prob_guess)
-        posterior_failure = bayesian_update_1d(prior, intensities, candidate_intensity, 0, k_guess, max_prob_guess, min_prob_guess)
+        posterior_success = bayesian_update_1d(prior, intensities, candidate_intensity, 1, k_guess, max_prob_guess,
+                                               min_prob_guess)
+        posterior_failure = bayesian_update_1d(prior, intensities, candidate_intensity, 0, k_guess, max_prob_guess,
+                                               min_prob_guess)
 
         # Recursively compute the expected entropy for the remaining trials
-        expected_entropy_success, _ = expected_entropy_after_n_trials(posterior_success, intensities, k_guess, max_prob_guess, min_prob_guess, n_trials - 1)
-        #print(expected_entropy_success)
-        #print(f'returned once {n_trials-1}')
-        expected_entropy_failure, _ = expected_entropy_after_n_trials(posterior_failure, intensities, k_guess, max_prob_guess, min_prob_guess, n_trials - 1)
+        expected_entropy_success, _ = expected_entropy_after_n_trials(posterior_success, intensities, k_guess,
+                                                                      max_prob_guess, min_prob_guess, n_trials - 1)
+        # print(expected_entropy_success)
+        # print(f'returned once {n_trials-1}')
+        expected_entropy_failure, _ = expected_entropy_after_n_trials(posterior_failure, intensities, k_guess,
+                                                                      max_prob_guess, min_prob_guess, n_trials - 1)
 
         # Compute the expected entropy for this candidate intensity (scalar value)
         expected_entropy = np.sum(
@@ -187,8 +199,9 @@ def expected_entropy_after_n_trials(prior, intensities, k_guess, max_prob_guess,
 
     return min_expected_entropy, best_intensity
 
-#from functools import lru_cache
-#@lru_cache(maxsize=None)  # Cache all results
+
+# from functools import lru_cache
+# @lru_cache(maxsize=None)  # Cache all results
 def choose_next_intensity_minimize_entropy(prior, intensities, k_guess, max_prob_guess, min_prob_guess, n_trials=5):
     """
     Choose the next intensity level to minimize the expected entropy after n_trials.
@@ -197,10 +210,12 @@ def choose_next_intensity_minimize_entropy(prior, intensities, k_guess, max_prob
     print(f'choose_next_intensity_minimize_entropy {n_trials}')
 
     # Compute the expected entropy for this candidate intensity
-    expected_entropy, best_intensity = expected_entropy_after_n_trials(prior, intensities, k_guess, max_prob_guess, min_prob_guess, n_trials)
+    expected_entropy, best_intensity = expected_entropy_after_n_trials(prior, intensities, k_guess, max_prob_guess,
+                                                                       min_prob_guess, n_trials)
     print('completed outer')
 
     return best_intensity
+
 
 # Function to choose the next intensity based on the lookup table
 def choose_next_intensity_from_lookup(lookup_table, result_sequence):
@@ -208,8 +223,9 @@ def choose_next_intensity_from_lookup(lookup_table, result_sequence):
     Choose the next intensity based on the precomputed lookup table and the sequence of results so far.
     """
 
-    #print(lookup_table)
+    # print(lookup_table)
     return lookup_table[result_sequence]['intensity']
+
 
 # Function to compute the 80% confidence interval
 def compute_confidence_window(posterior, intensities, confidence_level=0.80):
@@ -220,9 +236,11 @@ def compute_confidence_window(posterior, intensities, confidence_level=0.80):
 
 
 # Run the Bayesian estimation process with a uniform prior
-def run_bayesian_estimation(k=2, b=32, k_guess=2, noise_level=0.01, max_prob_guess=0.95, min_prob_guess=0.05, max_prob=0.95, min_prob=0.05, plot_results = True, num_trials = 5):
+def run_bayesian_estimation(k=2, b=32, k_guess=2, noise_level=0.01, max_prob_guess=0.95, min_prob_guess=0.05,
+                            max_prob=0.95, min_prob=0.05, plot_results=True, num_trials=5,
+                            lookup_file='optimal_choices.pkl'):
     # Load the lookup table from the file
-    with open('optimal_choices_fast_old.pkl', 'rb') as f:
+    with open(lookup_file, 'rb') as f:
         lookup_table = pickle.load(f)
     # Initialize the sequence of results
     result_sequence = ''
@@ -238,15 +256,15 @@ def run_bayesian_estimation(k=2, b=32, k_guess=2, noise_level=0.01, max_prob_gue
     max_intensity = 14
     intensities = np.linspace(0, max_intensity, intensity_levels)
     intensities = stimuli_dBlevels
-    #intensities = np.linspace(min(stimuli_dBlevels), max(stimuli_dBlevels), intensity_levels)
+    # intensities = np.linspace(min(stimuli_dBlevels), max(stimuli_dBlevels), intensity_levels)
     intensity_levels = len(intensities)
 
     # Define possible values for k and b
-    #k_values = np.linspace(0.5, 3, 40)  # Example range for k
+    # k_values = np.linspace(0.5, 3, 40)  # Example range for k
     b_values = np.linspace(0, 40, 81)  # Example range for b
 
     # Initialize a uniform prior distribution for the threshold
-    prior = np.ones_like(b_values) / (max(b_values)-min(b_values))
+    prior = np.ones_like(b_values) / (max(b_values) - min(b_values))
     # Define the parameters for the bimodal distribution
     mean_b1 = 35  # Mean of the first Gaussian
     std_b1 = 10  # Standard deviation of the first Gaussian
@@ -280,7 +298,8 @@ def run_bayesian_estimation(k=2, b=32, k_guess=2, noise_level=0.01, max_prob_gue
     x_range_true = np.linspace(min(intensities), max(intensities), len(intensities))
     x_range = np.linspace(min(intensities), max(intensities), len(b_values))
     if plot_results:
-        plt.plot(intensities, logistic_function(intensities, k, b), label='True Logistic Curve', color='k', linestyle='-')
+        plt.plot(intensities, logistic_function(intensities, k, b), label='True Logistic Curve', color='k',
+                 linestyle='-')
         plt.plot(intensities, noisy_probabilities, label='True Noisy Logistic Curve', color='k', linestyle='--')
     # color_index = ['C0', 'C1']
     # Conduct trials and update posterior
@@ -288,9 +307,9 @@ def run_bayesian_estimation(k=2, b=32, k_guess=2, noise_level=0.01, max_prob_gue
         ## print(f'trial {i+1} of {num_trials}')
         # Choose next intensity based on the current posterior
         # _, next_intensity_refined = choose_next_intensity_1d(prior, b_values, max_prob_guess=0.95, min_prob_guess=0.05)
-        #next_intensity_refined = choose_next_intensity_minimize_entropy(prior, b_values, k_guess, max_prob_guess,
+        # next_intensity_refined = choose_next_intensity_minimize_entropy(prior, b_values, k_guess, max_prob_guess,
         #                                                                min_prob_guess, n_trials=num_trials-i)
-        if(i<4):
+        if (i < 4):
             next_intensity_refined = choose_next_intensity_from_lookup(lookup_table, result_sequence)
         else:
             _, next_intensity_refined = choose_next_intensity_1d(prior, b_values, max_prob_guess=0.95,
@@ -305,8 +324,8 @@ def run_bayesian_estimation(k=2, b=32, k_guess=2, noise_level=0.01, max_prob_gue
         # Observe the result of this trial
         result = observe_result(next_intensity_index, noisy_probabilities)
         if i == 0:
-            #result = 0
-            a=1
+            # result = 0
+            a = 1
         results[i] = np.asarray([next_intensity, result])
         ## print(f"Trial {i + 1}: prior_max = {b_values[np.argmax(prior)]}, Test intensity = {next_intensity:.4f}, Result = {result}, Intensity index = {next_intensity_index}, Ideal test intensity = {next_intensity_refined}")
 
@@ -314,12 +333,12 @@ def run_bayesian_estimation(k=2, b=32, k_guess=2, noise_level=0.01, max_prob_gue
         result_sequence += str(result)
         # Update the posterior distribution after the trial
         prior = bayesian_update_1d(prior, b_values, next_intensity, result,
-                                k_guess, max_prob_guess, min_prob_guess)
-        #lower_bound, upper_bound = compute_confidence_window(prior_b, intensities_refined, confidence_level=0.90)
+                                   k_guess, max_prob_guess, min_prob_guess)
+        # lower_bound, upper_bound = compute_confidence_window(prior_b, intensities_refined, confidence_level=0.90)
         lower_bound, upper_bound = compute_confidence_window(prior, b_values, confidence_level=0.80)
         trial_confidence_window.append(upper_bound - lower_bound)
         mode_value = b_values[np.argmax(prior)]
-        mean_value = np.sum(b_values * prior*(b_values[1]-b_values[0]))
+        mean_value = np.sum(b_values * prior * (b_values[1] - b_values[0]))
         # Compute the cumulative distribution function (CDF)
         cdf = np.cumsum(prior)
         # Find the median
@@ -328,25 +347,27 @@ def run_bayesian_estimation(k=2, b=32, k_guess=2, noise_level=0.01, max_prob_gue
         if i % 1 == 0 and plot_results:
             # Plot the posterior distribution after each trial
             # Compute and plot the 80% confidence window
-            #idealk = k_values[np.argmax(prior[:,np.argmax(prior_b)])]
-            #plt.plot(next_intensity, result, label=f'trial {i + 1}', color='C' + str(i % 10), linestyle='None',
+            # idealk = k_values[np.argmax(prior[:,np.argmax(prior_b)])]
+            # plt.plot(next_intensity, result, label=f'trial {i + 1}', color='C' + str(i % 10), linestyle='None',
             #         marker='o')
             plt.plot(next_intensity, result, color='C' + str(i % 10), linestyle='None',
                      marker='o')
-            plt.plot(x_range, logistic_function(x_range, k_guess, b_values[np.argmax(prior)])*(max_prob_guess - min_prob_guess) + min_prob_guess,
+            plt.plot(x_range, logistic_function(x_range, k_guess, b_values[np.argmax(prior)]) * (
+                    max_prob_guess - min_prob_guess) + min_prob_guess,
                      label=f'Guess after trial {i + 1}', color='C' + str(i % 10), alpha=0.6)
-            #plt.plot(x_range, logistic_function(x_range, idealk, b_values[np.argmax(prior_b)])*(max_prob_guess - min_prob_guess) + min_prob_guess,
+            # plt.plot(x_range, logistic_function(x_range, idealk, b_values[np.argmax(prior_b)])*(max_prob_guess - min_prob_guess) + min_prob_guess,
             #         label=f'Guess after trial {i + 1}, k={round(idealk,3)}, b={round(b_values[np.argmax(prior_b)],3)}', color='C' + str(i % 10))
-            #plt.plot(intensities_refined, prior_b,
+            # plt.plot(intensities_refined, prior_b,
             #         label=f'Posterior after trial {i + 1}, ({round(trial_confidence_window[-1], 4)})',
             #         color='C' + str(i % 10))
             plt.plot(b_values, prior,
                      label=f'Posterior b after trial {i + 1}, ({round(trial_confidence_window[-1], 4)})',
-                     color='C' + str((i+1) % 10))
-            #plt.plot(k_values, prior[:,np.argmax(prior_b)],
+                     color='C' + str((i + 1) % 10))
+            # plt.plot(k_values, prior[:,np.argmax(prior_b)],
             #         label=f'Posterior k after trial {i + 1}, ({round(trial_confidence_window[-1], 4)})',
             #         color='C' + str(i % 10))
-            plt.fill_betweenx([i / num_trials, (i + 1) / num_trials], lower_bound, upper_bound, color='C' + str((i+1) % 10),
+            plt.fill_betweenx([i / num_trials, (i + 1) / num_trials], lower_bound, upper_bound,
+                              color='C' + str((i + 1) % 10),
                               alpha=0.2)
 
     prior = np.ones_like(intensities) / len(intensities)
@@ -402,9 +423,10 @@ def run_bayesian_estimation(k=2, b=32, k_guess=2, noise_level=0.01, max_prob_gue
         all_trials_likelihood /= trapz(all_trials_likelihood,
                                        dx=(max(intensities) - min(intensities)) / intensity_levels)
     # plt.plot(intensities, all_trials_likelihood, 'o', label = "posterior combined trials", color = 'k')
-    if plot_results and np.abs(trial_max_posterior[4][0]-b)>6:
-        print(trial_max_posterior[4])
-        plt.title(f'b = {b}, trial 4 result max posterior: {trial_max_posterior[4]}')
+    if plot_results:  # and np.abs(trial_max_posterior[4][0]-b)>6:
+        print(trial_max_posterior[min(num_trials - 1, 4)])
+        plt.title(
+            f'b = {b}, trial {min(num_trials - 1, 4)} result max posterior: {trial_max_posterior[min(num_trials - 1, 4)]}')
         plt.plot(np.linspace(1, num_trials, num_trials), np.array(trial_confidence_window) / 10)
         plt.show()
     else:
@@ -419,18 +441,18 @@ def run_bayesian_estimation(k=2, b=32, k_guess=2, noise_level=0.01, max_prob_gue
 
 # Run the Bayesian estimation process
 np.random.seed(0)
-#run_bayesian_estimation(b=20,plot_results = True)
+run_bayesian_estimation(b=15, num_trials=4, plot_results=True, lookup_file='optimal_choices.pkl')
 
-if 1:
-    bs = np.arange(0, 41,10)  # bs from 0 to 40
+if 0:
+    bs = np.arange(0, 41, 10)  # bs from 0 to 40
     num_tests = 100
     num_trials = 5
-    final_results = np.zeros((len(bs),num_tests, num_trials,3)) #mode mean median
+    final_results = np.zeros((len(bs), num_tests, num_trials, 3))  # mode mean median
     for i, b in enumerate(bs):
         for j in range(num_tests):
-            print(f'b = {b} in {bs}, {j+1} of {num_tests}')
-            final_results[i,j] = run_bayesian_estimation(b=b,plot_results = False, num_trials = num_trials)
-            #run_bayesian_estimation(k=2, b=32, k_guess=2, noise_level=0.01, max_prob_guess=0.95, min_prob_guess=0.05, max_prob=0.95, min_prob=0.05)
+            print(f'b = {b} in {bs}, {j + 1} of {num_tests}')
+            final_results[i, j] = run_bayesian_estimation(b=b, plot_results=False, num_trials=num_trials)
+            # run_bayesian_estimation(k=2, b=32, k_guess=2, noise_level=0.01, max_prob_guess=0.95, min_prob_guess=0.05, max_prob=0.95, min_prob=0.05)
 
     # Save final_results to a file
     np.save(f'final_results_old_bs_{bs}_num_tests_{num_tests}_trials_{num_trials}_precompute4.npy', final_results)
