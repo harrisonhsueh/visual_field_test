@@ -100,7 +100,8 @@ def build_kd_tree(humpfrey_positions):
 
 
 def update_results(pressed, key_press_time, last_dot_time, results, index, dot_color_index, stimuli_dBs):
-    print(f'updating results with pressed = {pressed}, key_press_time = {key_press_time}, last_dot_time = {last_dot_time}, index = {index}, dot_color_index = {dot_color_index}, dot_dB = {stimuli_dBs[dot_color_index]}')
+    print(
+        f'updating results with pressed = {pressed}, key_press_time = {key_press_time}, last_dot_time = {last_dot_time}, index = {index}, dot_color_index = {dot_color_index}, dot_dB = {stimuli_dBs[dot_color_index]}')
     print(f'before update: {results}')
     print(results)
     if not pressed:  # stimulus was just flashed
@@ -128,7 +129,8 @@ def update_results(pressed, key_press_time, last_dot_time, results, index, dot_c
         else:
             print('logging stimuli responded positively, has no previous responses')
             next_index = 0
-        if results[index, next_index, 3] == 0:  # check if stimuli was shown/logged, and this is first key press. otherwise it is a double click and a false positive
+        if results[
+            index, next_index, 3] == 0:  # check if stimuli was shown/logged, and this is first key press. otherwise it is a double click and a false positive
             print('logging stimuli responded positively, checked that previous response is 0')
             results[index, next_index] = np.array(
                 [last_dot_time, key_press_time - last_dot_time, stimuli_dBs[dot_color_index], True])
