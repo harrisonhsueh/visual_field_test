@@ -132,8 +132,19 @@ def confidence_interval_vectorized(posteriors, intensities, confidence):
     - lowers: Lower bounds of the confidence intervals (shape: (m,)).
     - uppers: Upper bounds of the confidence intervals (shape: (m,)).
     """
+    # Compute the spacing between intensity values
+    spacing = np.diff(intensities)
+    # Add a dummy spacing at the end (assuming the last bin has the same width as the previous one)
+    spacing = np.append(spacing, spacing[-1])
+
+    # Weight the posteriors by the spacing
+    weighted_posteriors = posteriors * spacing
+
+    # Normalize the weighted posteriors to ensure they sum to 1
+    weighted_posteriors = weighted_posteriors / np.sum(weighted_posteriors, axis=1, keepdims=True)
+
     # Compute cumulative sums along rows
-    cumulative = np.cumsum(posteriors, axis=1)
+    cumulative = np.cumsum(weighted_posteriors, axis=1)
 
     # Compute lower and upper bounds for each row
     lower_idx = np.array([np.searchsorted(row, (1 - confidence) / 2) for row in cumulative])

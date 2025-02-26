@@ -1,8 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from utils import bayesian_all, logistic_function
-from constants import prior, b_values, k_guess, max_prob_guess, min_prob_guess
-
+from utils import bayesian_all, logistic_function, confidence_interval_vectorized
+from constants import prior, b_values, k_guess, max_prob_guess, min_prob_guess, stimuli_dBlevels
+print(stimuli_dBlevels)
 
 def load_data(start_time):
     results = np.load(f'visual_field_test_results_{start_time}.npy')
@@ -37,24 +37,50 @@ def print_tests_chronologically(results):
     print(f"Shape of flattened results: {flattened_results.shape}")
 
 
-def plot_individual_position_results_with_threshold(position_index, results, thresholds, phitheta, posteriors):
+def plot_individual_position_results_with_threshold(position_index, results, thresholds, phitheta, posteriors,
+                                                    confidence):
+    """
+        Plot individual position results with threshold, posterior, and confidence interval.
+
+        Args:
+            position_index (int): Index of the position to plot.
+            results (np.ndarray): The results array of shape (m, n, p).
+            thresholds (np.ndarray): The thresholds array of shape (m,).
+            phitheta (np.ndarray): The positions array of shape (m, 2).
+            posteriors (np.ndarray): The posterior distributions of shape (m, n).
+            intensities (np.ndarray): The array of possible intensity values (shape: (n,)).
+            confidence (float): The confidence level (e.g., 0.95 for 95% CI).
+    """
+    # Compute confidence interval
+    widths, lowers, uppers = confidence_interval_vectorized(posteriors, b_values, confidence)
+
     mask = results[position_index, :, 0] != 0
     x_values = results[position_index, mask, 2]
     y_values = results[position_index, mask, 3]
 
     plt.scatter(x_values, y_values, color='blue', label="Data Points")
+    for j, (x, y) in enumerate(zip(x_values, y_values)):
+        plt.text(x, y, str(j), fontsize=12, ha='right', va='bottom', color='black')
     plt.plot(b_values, posteriors[position_index], label="posterior probability")
     plt.plot(b_values, logistic_function(b_values, k_guess, thresholds[position_index]),
              label="fitted logistic function")
-
-    for j, (x, y) in enumerate(zip(x_values, y_values)):
-        plt.text(x, y, str(j), fontsize=12, ha='right', va='bottom', color='black')
+    # Add shaded confidence interval region
+    plt.fill_between(b_values, 0, 1,
+                     where=(b_values >= lowers[position_index]) & (b_values <= uppers[position_index]),
+                     color='gray', alpha=0.3, label=f"{int(confidence * 100)}% Confidence Interval")
+    # Add text for confidence interval width and bounds
+    ci_text = f"CI Width: {widths[position_index]:.2f}\nLower: {lowers[position_index]:.2f}, Upper: {uppers[position_index]:.2f}"
+    plt.text(0.05, 0.5, ci_text, transform=plt.gca().transAxes, fontsize=12,
+             verticalalignment='top', bbox=dict(facecolor='white', alpha=0.8))
 
     plt.axvline(x=thresholds[position_index], color='r', linestyle='--', label="Threshold")
-    plt.title(f'Position in degrees: {phitheta[position_index]}, index {position_index}')
+    plt.xlim((min(stimuli_dBlevels), max(stimuli_dBlevels)))
     plt.ylim((-0.1, 1.1))
-    plt.xlim((12, 40))
-    plt.legend()
+    plt.xlabel("Intensity")
+    plt.ylabel("Probability")
+    plt.title(f'Position in degrees: {phitheta[position_index]}, index {position_index}')
+    plt.legend(loc='upper left')
+    plt.grid(True)
     plt.show()
 
 
@@ -118,8 +144,8 @@ def main():
     print_tests_chronologically(results)
 
     for i in range(len(thresholds)):
-        if i == np.argmin(thresholds) or thresholds[i] < 15:
-            plot_individual_position_results_with_threshold(i, results, thresholds, phitheta, posteriors)
+        if i == np.argmin(thresholds) or thresholds[i] < 99:
+            plot_individual_position_results_with_threshold(i, results, thresholds, phitheta, posteriors, 0.95)
 
     # Option 1: Flatten once and pass to functions
     plot_response_time_histogram(results)
