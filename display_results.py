@@ -1,5 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from utils import bayesian_all, logistic_function
+from constants import prior, b_values, k_guess, max_prob_guess, min_prob_guess
 #import seaborn as sns
 
 start_time = '2025-02-25_12-04-59'
@@ -23,12 +25,41 @@ plt.ylabel("Y Position")
 plt.title("Visual Field Test Thresholds Heatmap")
 plt.grid(True)
 plt.show()
-print(thresholds.shape)
+print(f'shape of thresholds {thresholds.shape}')
+posteriors = bayesian_all(prior, b_values, results, k_guess, max_prob_guess, min_prob_guess)
 #i=1 is weird
 for i, threshold in enumerate(thresholds):
-    if i == np.argmin(thresholds) or thresholds[i] < 25:
+    if i == np.argmin(thresholds) or thresholds[i] < 95:
         mask = results[i, :, 0] != 0  # Create a mask where results[i, j, 0] is not zero
-        plt.plot(results[i, mask, 2], results[i, mask, 3], 'o')  # Apply mask
-        plt.plot(thresholds[i], 0.5, 'o', label="threshold")
-        plt.title(f'{phitheta[i]}')
+        x_values = results[i, mask, 2]  # X-coordinates
+        y_values = results[i, mask, 3]  # Y-coordinates
+
+
+
+        plt.scatter(x_values, y_values, color='blue', label="Data Points")  # Consistent color
+        plt.plot(b_values, posteriors[i], label="posterior probability")
+        plt.plot(b_values, logistic_function(b_values, k_guess, thresholds[i]), label="fitted logistic function")
+        # Add labels for each point
+        for j, (x, y) in enumerate(zip(x_values, y_values)):
+            plt.text(x, y, str(j), fontsize=12, ha='right', va='bottom', color='black')
+
+        plt.axvline(x=thresholds[i], color='r', linestyle='--', label="Threshold")  # Vertical line
+        plt.title(f'Position in degrees: {phitheta[i]}')
+        plt.ylim((-0.1, 1.1))
+        plt.xlim((12,40))
+        plt.legend()
         plt.show()
+
+flattened_results = results.reshape((results.shape[0]*results.shape[1],results.shape[2]))
+#flattened_results = results[-1]
+mask = (flattened_results[:, 0] != 0) & (flattened_results[:, 3] == 1)  # Create a mask where results[i, j, 0] is not zero
+print(f' clicked {np.sum(mask)} times')
+print(f' shown {np.sum(flattened_results[:, 0] != 0)} stimuli')
+
+bins = np.linspace(0, 1.5, num=100)  # Creates 50 bins from 0 to 1.5 for finer resolution
+
+plt.hist(flattened_results[mask, 1], bins=bins, edgecolor='black')  # Apply mask and finer bins
+plt.xlabel("Value")
+plt.ylabel("Frequency")
+plt.title("Histogram of response times")
+plt.show()
