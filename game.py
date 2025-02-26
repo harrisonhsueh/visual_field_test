@@ -33,7 +33,7 @@ def initialize_game_state():
     responses_positions = np.empty((humpfrey_positions.shape[0], len(stimuli_dBlevels),
                                     20))  # 3D array for storing responses, only supports up to 10 tests per position
     results = np.zeros((humpfrey_positions.shape[0] + 1, 30,
-                        4))  # [-1] is for false positives. Shape (m+1,n,p). m is number of positions. n is max number of tests per position, and size p is for time of stimuli, response time, stimuli dB, and 1 or 0 for the result
+                        4))  # [-1] is for false positives. Shape (m+1 ,n,p). m is number of positions. n is max number of tests per position, and size p is for time of stimuli, response time, stimuli dB, and 1 or 0 for the result
     responses_positions[:] = np.nan  # Initialize with NaN values to mark no response ##replace with results
     responses_lists = [[] for _ in range(humpfrey_positions.shape[0])]  # replace with results
     responses_times = []  # List to store response times #replace with results
@@ -81,18 +81,15 @@ def all_thresholds_found(posteriors, intensities, thresholds, confidence=0.95, c
     return False
 
 
-def update_thresholds(prior, results, posteriors, thresholds):
+def update_thresholds(prior, results):
     ''' 
     :param thresholds: array to store calculated thresholds (shape: (m,)).
     :param prior:  array (shape: (m, q)).
     :param results:  array (shape: (m, n, p)).
     :return: posterior (shape: (m, q)).
     '''
-    # print(f'prior {prior}')
     new_posteriors = bayesian_all(prior, b_values, results[:-1], k_guess, max_prob_guess, min_prob_guess)
-    # print(f'posteriors {posteriors}')
-    # print(f'thresholds {thresholds}')
-    new_thresholds = b_values[np.argmax(posteriors, axis=1)]
+    new_thresholds = b_values[np.argmax(new_posteriors, axis=1)]
     return new_posteriors, new_thresholds
 
 
@@ -335,7 +332,6 @@ def main(screen):
                 if time.time() - last_dot_time > time_pause and not dot_visible:
                     time_pause = random.uniform(time_pause_limit[0], time_pause_limit[1])
                     index = np.random.choice(humpfrey_positions.shape[0], 1, replace=False)[0]
-                    posteriors, thresholds = update_thresholds(prior, results, posteriors, thresholds)
                     dot_dB = choose_next_intensity(index, results, posteriors, b_values, lookup_table)
                     dot_color_index = np.argmin(np.abs(stimuli_dBlevels - dot_dB))
                     if dot_color_index is not None:
@@ -351,6 +347,7 @@ def main(screen):
                         #     responses_positions[first_nan_index] = False
                         last_dot_time = time.time()
                         update_results(0, 0, last_dot_time, results, index, dot_color_index, stimuli_dBlevels)
+                        posteriors, thresholds = update_thresholds(prior, results, posteriors, thresholds)
                         # responses_times.append([index, dot_color_index, last_dot_time, 0])
                         # responses_lists[index].append([dot_color_index, 0])
                         dot_visible = True

@@ -15,7 +15,6 @@ phitheta = np.load(f'visual_field_test_phitheta_{start_time}.npy')
 # Extract x and y coordinates
 x, y = positions[:, 0], positions[:, 1]
 x, y = phitheta[:, 0], phitheta[:, 1]
-print(thresholds)
 # Create scatter plot
 plt.figure(figsize=(8, 6))
 sc = plt.scatter(x, y, c=thresholds, cmap='grey', edgecolor='k', s=100)
@@ -26,7 +25,42 @@ plt.title("Visual Field Test Thresholds Heatmap")
 plt.grid(True)
 plt.show()
 print(f'shape of thresholds {thresholds.shape}')
-posteriors = bayesian_all(prior, b_values, results, k_guess, max_prob_guess, min_prob_guess)
+print(thresholds)
+print(f'shape of results {results.shape}')
+print(results)
+print(results[16])
+
+
+m, n, p = results.shape  # Extracting the dimensions
+
+# Create a new list to store flattened test data
+ordered_tests = []
+
+for position_idx in range(m):  # Loop over positions (including false positives)
+    for test_idx in range(n):  # Loop over test instances per position
+        test_data = results[position_idx, test_idx]
+        time_of_stimuli, response_time, stimuli_db, test_result = test_data
+
+        # Ignore uninitialized test slots (assuming zero means unused)
+        if time_of_stimuli == 0 and response_time == 0 and stimuli_db == 0 and test_result == 0:
+            continue
+
+        ordered_tests.append([time_of_stimuli, position_idx, response_time, stimuli_db, test_result])
+
+# Convert to NumPy array and sort by time of stimuli (column 0)
+ordered_tests = np.array(ordered_tests)
+ordered_tests = ordered_tests[ordered_tests[:, 0].argsort()]  # Sort by time_of_stimuli
+#np.set_printoptions(suppress=True, precision=10)  # Suppress scientific notation and increase precision
+# Get the first (earliest) timestamp
+start_time = ordered_tests[0, 0]
+
+# Subtract the start time from all timestamps
+ordered_tests[:, 0] -= start_time
+print(ordered_tests)  # Should be (30 * m, 5) or fewer if some slots were unused
+print(ordered_tests.shape)  # Should be (30 * m, 5) or fewer if some slots were unused
+
+
+posteriors = bayesian_all(prior, b_values, results[:-1], k_guess, max_prob_guess, min_prob_guess)
 #i=1 is weird
 for i, threshold in enumerate(thresholds):
     if i == np.argmin(thresholds) or thresholds[i] < 95:
@@ -44,7 +78,7 @@ for i, threshold in enumerate(thresholds):
             plt.text(x, y, str(j), fontsize=12, ha='right', va='bottom', color='black')
 
         plt.axvline(x=thresholds[i], color='r', linestyle='--', label="Threshold")  # Vertical line
-        plt.title(f'Position in degrees: {phitheta[i]}')
+        plt.title(f'Position in degrees: {phitheta[i]}, index {i}')
         plt.ylim((-0.1, 1.1))
         plt.xlim((12,40))
         plt.legend()
